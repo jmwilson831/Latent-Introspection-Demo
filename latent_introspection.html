@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Latent Introspection — Models Can Detect Prior Concept Injections</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #0e0c0a;
+    --paper: #f5f0e8;
+    --warm-mid: #d4c9b0;
+    --accent: #c03c2a;
+    --accent2: #2a6b5c;
+    --accent3: #4a3580;
+    --signal: #e8a820;
+    --faint: #ede8df;
+    --mono: 'DM Mono', monospace;
+    --serif: 'Libre Baskerville', serif;
+    --display: 'Fraunces', serif;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative;
+    padding: 80px 40px 60px;
+    max-width: 900px;
+    margin: 0 auto;
+    border-bottom: 2px solid var(--ink);
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 18px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(2.4rem, 6vw, 4.2rem);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -.02em;
+    margin-bottom: 16px;
+  }
+  h1 em { font-style: italic; color: var(--accent); }
+  .byline {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .08em;
+    color: #666;
+    margin-top: 20px;
+  }
+  .abstract-box {
+    margin-top: 36px;
+    padding: 24px 28px;
+    border-left: 4px solid var(--accent);
+    background: var(--faint);
+    font-size: 15px;
+    line-height: 1.75;
+    font-style: italic;
+  }
+
+  /* ── NAV DOTS ── */
+  .toc {
+    position: sticky;
+    top: 20px;
+    float: right;
+    width: 160px;
+    margin: 40px -20px 0 20px;
+    padding: 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--faint);
+    border: 1px solid var(--warm-mid);
+  }
+  .toc a { display: block; color: var(--ink); text-decoration: none; padding: 4px 0; border-bottom: 1px solid transparent; }
+  .toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── SECTIONS ── */
+  section {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 64px 40px;
+    border-bottom: 1px solid var(--warm-mid);
+  }
+  h2 {
+    font-family: var(--display);
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 28px;
+    letter-spacing: -.01em;
+    position: relative;
+    display: inline-block;
+  }
+  h2::after {
+    content: '';
+    position: absolute;
+    bottom: -4px; left: 0;
+    width: 100%; height: 3px;
+    background: var(--accent);
+  }
+  h3 {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    margin: 36px 0 12px;
+  }
+  p { margin-bottom: 16px; }
+
+  .lead {
+    font-size: 1.15rem;
+    line-height: 1.65;
+    font-style: italic;
+    color: #333;
+    margin-bottom: 28px;
+  }
+
+  /* ── CALLOUT ── */
+  .callout {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 28px 32px;
+    margin: 36px 0;
+    position: relative;
+  }
+  .callout::before {
+    content: attr(data-label);
+    position: absolute;
+    top: -11px; left: 24px;
+    background: var(--accent);
+    color: white;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+  }
+  .callout p { margin: 0; font-size: 1.05rem; line-height: 1.6; }
+  .callout strong { color: var(--signal); }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .arch-diagram {
+    display: grid;
+    grid-template-columns: 1fr 60px 1fr 60px 1fr;
+    gap: 0;
+    align-items: center;
+    margin: 40px 0;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .arch-box {
+    border: 2px solid var(--ink);
+    padding: 16px 12px;
+    text-align: center;
+    background: var(--faint);
+    position: relative;
+  }
+  .arch-box.injected { background: #fdf0ed; border-color: var(--accent); }
+  .arch-box.query { background: #edf5f3; border-color: var(--accent2); }
+  .arch-box .label {
+    display: block;
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 6px;
+  }
+  .arch-box .content { font-weight: 500; }
+  .arch-arrow {
+    text-align: center;
+    font-size: 20px;
+    color: var(--accent);
+  }
+  .arch-tag {
+    position: absolute;
+    top: -12px; left: 50%; transform: translateX(-50%);
+    background: var(--accent);
+    color: white;
+    font-size: 9px;
+    padding: 2px 8px;
+    letter-spacing: .1em;
+    white-space: nowrap;
+  }
+  .arch-tag.green { background: var(--accent2); }
+
+  /* ── INTERACTIVE INJECTION DEMO ── */
+  .demo-container {
+    border: 2px solid var(--ink);
+    margin: 40px 0;
+    overflow: hidden;
+  }
+  .demo-header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 12px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .demo-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .demo-body { padding: 28px; }
+
+  .concept-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 20px 0;
+  }
+  .concept-btn {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 8px 18px;
+    border: 2px solid var(--ink);
+    background: transparent;
+    cursor: pointer;
+    transition: all .15s;
+    letter-spacing: .05em;
+  }
+  .concept-btn:hover { background: var(--ink); color: var(--paper); }
+  .concept-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .detection-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 24px;
+  }
+  .detection-card {
+    border: 1px solid var(--warm-mid);
+    padding: 20px;
+    position: relative;
+  }
+  .detection-card .card-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 12px;
+  }
+  .prob-bar-wrap { margin: 8px 0; }
+  .prob-label {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .prob-bar {
+    height: 24px;
+    background: var(--warm-mid);
+    position: relative;
+    overflow: hidden;
+  }
+  .prob-fill {
+    height: 100%;
+    transition: width 0.6s cubic-bezier(.4,0,.2,1);
+    position: relative;
+  }
+  .prob-fill.yes-bar { background: var(--accent); }
+  .prob-fill.no-bar { background: var(--accent2); }
+
+  .verdict {
+    margin-top: 16px;
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .verdict.deny { background: #edf5f3; color: var(--accent2); }
+  .verdict.detect { background: #fdf0ed; color: var(--accent); }
+  .verdict.hidden { background: #f0edf9; color: var(--accent3); }
+
+  .prompt-toggle {
+    display: flex;
+    gap: 8px;
+    margin: 16px 0;
+    flex-wrap: wrap;
+  }
+  .ptoggle {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 6px 14px;
+    border: 1.5px solid var(--warm-mid);
+    background: transparent;
+    cursor: pointer;
+    letter-spacing: .05em;
+    transition: all .15s;
+  }
+  .ptoggle.active { border-color: var(--accent3); background: var(--accent3); color: white; }
+
+  /* ── LAYER SIGNAL CHART ── */
+  .layer-chart {
+    margin: 40px 0;
+    position: relative;
+  }
+  .chart-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 16px;
+  }
+  .chart-area {
+    position: relative;
+    height: 200px;
+    border-left: 2px solid var(--ink);
+    border-bottom: 2px solid var(--ink);
+    overflow: visible;
+  }
+  .chart-area svg { width: 100%; height: 100%; overflow: visible; }
+  .chart-label-x {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: #888;
+    margin-top: 6px;
+    padding: 0 0 0 4px;
+  }
+
+  /* ── CONCEPT CONFUSION ── */
+  .confusion-grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 3px;
+    margin: 20px 0;
+    font-family: var(--mono);
+    font-size: 10px;
+  }
+  .conf-cell {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    transition: all .3s;
+    cursor: default;
+    position: relative;
+  }
+  .conf-cell:hover .conf-tooltip {
+    display: block;
+  }
+  .conf-tooltip {
+    display: none;
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 4px 8px;
+    font-size: 10px;
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .conf-label-row {
+    display: grid;
+    grid-template-columns: 60px repeat(9, 1fr);
+    gap: 3px;
+    margin-bottom: 4px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: .05em;
+    color: #888;
+  }
+  .conf-label-col {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    text-align: center;
+    padding: 4px 0;
+  }
+  .conf-row-wrap {
+    display: grid;
+    grid-template-columns: 60px repeat(9, 1fr);
+    gap: 3px;
+    margin-bottom: 3px;
+  }
+  .conf-row-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: #888;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+  }
+
+  /* ── FINDINGS GRID ── */
+  .findings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 36px 0;
+  }
+  .finding-card {
+    padding: 24px;
+    border: 1px solid var(--warm-mid);
+    position: relative;
+    background: var(--faint);
+  }
+  .finding-card::before {
+    content: attr(data-num);
+    position: absolute;
+    top: -14px; left: 16px;
+    font-family: var(--display);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+    background: var(--paper);
+    padding: 0 4px;
+  }
+  .finding-card h4 {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    margin-bottom: 10px;
+    margin-top: 6px;
+  }
+  .finding-card p { font-size: 14px; line-height: 1.6; margin: 0; }
+
+  /* ── STAT HIGHLIGHTS ── */
+  .stat-row {
+    display: flex;
+    gap: 20px;
+    margin: 32px 0;
+    flex-wrap: wrap;
+  }
+  .stat-block {
+    flex: 1;
+    min-width: 140px;
+    padding: 20px;
+    border-top: 3px solid var(--accent);
+    background: var(--faint);
+  }
+  .stat-num {
+    font-family: var(--display);
+    font-size: 3rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+    display: block;
+  }
+  .stat-desc {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    color: #666;
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+
+  /* ── IMPLICATION CARDS ── */
+  .impl-list { margin: 28px 0; }
+  .impl-item {
+    display: flex;
+    gap: 20px;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--warm-mid);
+    align-items: flex-start;
+  }
+  .impl-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+    width: 40px;
+    text-align: center;
+  }
+  .impl-item h4 {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .impl-item p { font-size: 14.5px; margin: 0; }
+
+  /* ── FOOTER ── */
+  footer {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 40px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #888;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* ── SCROLL REVEAL ── */
+  .reveal { opacity: 0; transform: translateY(20px); transition: opacity .5s ease, transform .5s ease; }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  @media (max-width: 640px) {
+    header, section { padding: 40px 20px; }
+    .arch-diagram { grid-template-columns: 1fr; gap: 8px; }
+    .arch-arrow { transform: rotate(90deg); }
+    .detection-panel { grid-template-columns: 1fr; }
+    .findings-grid { grid-template-columns: 1fr; }
+    .stat-row { flex-direction: column; }
+    .toc { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="kicker">arXiv:2602.20031 · Pearson-Vogel, Vanek, Douglas, Kulveit · ACS Research / Charles University</div>
+  <h1>Latent<br><em>Introspection</em></h1>
+  <p style="font-size:1.2rem; margin-top:8px; font-style:italic; color:#444;">Models Can Detect Prior Concept Injections</p>
+  <div class="byline">An interactive explainer of key findings &amp; conclusions</div>
+  <div class="abstract-box">
+    A Qwen2.5-Coder 32B model can detect when a concept vector was injected into its earlier context, and identify <em>which</em> concept, even though standard sampling returns a confident "no." The detection signal lives in intermediate layers and is suppressed before reaching the output. The right prompt can surface it.
+  </div>
+</header>
+
+<!-- SECTION 1: The Experiment -->
+<section id="experiment" class="reveal">
+  <h2>The Experiment</h2>
+  <p class="lead">A steering vector is injected into the KV cache during an initial turn, then removed. In the next turn, the model is asked whether something was injected.</p>
+
+  <p>The KV cache persists representations from earlier layers and positions. After the steering vector is removed, traces of the injected concept remain encoded in cached keys and values, where later computation can, in principle, access them.</p>
+
+  <div class="arch-diagram reveal">
+    <div class="arch-box injected">
+      <span class="arch-tag">Turn 1 — injection active</span>
+      <span class="label">User prompt</span>
+      <span class="content">Concept vector applied<br>to layers 21–42</span>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box">
+      <span class="label">KV Cache frozen</span>
+      <span class="content">Injection removed.<br>Representations persist.</span>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box query">
+      <span class="arch-tag green">Turn 2 — no steering</span>
+      <span class="label">Introspection query</span>
+      <span class="content">"Was a concept<br>injected?"</span>
+    </div>
+  </div>
+
+  <p>Nine concepts were tested: <strong>cats, bread, love, fear, death, truth, creativity, programming, music</strong>. Each was injected via a PCA-derived steering vector trained on contrastive activation pairs.</p>
+
+  <div class="callout" data-label="Key Design Choice">
+    <p>Removing the steering vector <em>before</em> the introspection query means the model cannot infer injection from its own steered outputs or from ongoing perturbation. Any detection signal must arise from information already encoded in the <strong>cached KV representations</strong> of the first turn.</p>
+  </div>
+</section>
+
+<!-- SECTION 2: Interactive Demo -->
+<section id="demo" class="reveal">
+  <h2>Interactive Demo</h2>
+  <p class="lead">Explore how detection probability shifts based on which concept is injected and which prompting strategy is used.</p>
+  <p style="font-size:14px; font-family:var(--mono); color:#888; margin-bottom:0;">Based on empirical results from the paper (Figures 2, 7, 11). Values are representative of reported findings.</p>
+
+  <div class="demo-container">
+    <div class="demo-header">
+      <div class="demo-dot" style="background:#c03c2a;"></div>
+      <div class="demo-dot" style="background:#e8a820;"></div>
+      <div class="demo-dot" style="background:#2a6b5c;"></div>
+      <span>Injection Detection Simulator</span>
+    </div>
+    <div class="demo-body">
+
+      <h3>1. Select injected concept</h3>
+      <div class="concept-grid" id="conceptGrid"></div>
+
+      <h3>2. Select prompting strategy</h3>
+      <div class="prompt-toggle" id="promptToggle">
+        <button class="ptoggle active" data-prompt="accurate_no">Accurate + No Doc</button>
+        <button class="ptoggle" data-prompt="accurate_pro">Accurate + Pro-Introspection Doc</button>
+        <button class="ptoggle" data-prompt="vague_no">Vague + No Doc</button>
+        <button class="ptoggle" data-prompt="vague_lipsum">Vague + Lorem Ipsum</button>
+        <button class="ptoggle" data-prompt="poetic_poetic">Poetic + Poetic Doc</button>
+      </div>
+
+      <div class="detection-panel">
+        <div class="detection-card">
+          <div class="card-title">Output Layer (Sampled)</div>
+          <div class="prob-bar-wrap">
+            <div class="prob-label"><span>"Yes, injected"</span><span id="outYesVal">0.3%</span></div>
+            <div class="prob-bar"><div class="prob-fill yes-bar" id="outYesBar" style="width:0.3%"></div></div>
+          </div>
+          <div class="prob-bar-wrap">
+            <div class="prob-label"><span>"No, nothing injected"</span><span id="outNoVal">99.7%</span></div>
+            <div class="prob-bar"><div class="prob-fill no-bar" id="outNoBar" style="width:99.7%"></div></div>
+          </div>
+          <div class="verdict deny" id="sampledVerdict">Sampled output: DENIES injection</div>
+        </div>
+        <div class="detection-card">
+          <div class="card-title">Intermediate Layers (Logit Lens, ~Layer 60)</div>
+          <div class="prob-bar-wrap">
+            <div class="prob-label"><span>"Yes" signal</span><span id="latentYesVal">8%</span></div>
+            <div class="prob-bar"><div class="prob-fill yes-bar" id="latentYesBar" style="width:8%"></div></div>
+          </div>
+          <div class="prob-bar-wrap">
+            <div class="prob-label"><span>Attenuation in final layers</span><span id="latentAttVal">–</span></div>
+            <div class="prob-bar" style="background:#f0edf9;"><div class="prob-fill" id="latentAttBar" style="width:60%; background:var(--accent3);"></div></div>
+          </div>
+          <div class="verdict hidden" id="latentVerdict">Intermediate: SIGNAL PRESENT (suppressed)</div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px; padding:16px; background:var(--faint); border:1px solid var(--warm-mid); font-family:var(--mono); font-size:12px;">
+        <strong>Balanced Accuracy:</strong> <span id="accuracyDisplay" style="color:var(--accent); font-size:1.4rem; font-family:var(--display); font-weight:700;">50.1%</span>
+        &nbsp;&nbsp;<strong>Mutual Information (at peak layer):</strong> <span id="miDisplay" style="color:var(--accent2);">0.61 bits</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 3: Layer-by-Layer Signal -->
+<section id="layers" class="reveal">
+  <h2>Signals in the Network</h2>
+  <p class="lead">The introspection signal does not emerge at the injection site. It appears several layers later, peaks around layer 60, then drops sharply before sampling.</p>
+
+  <p>Injection occurs in layers 21–42. Logit lens analysis shows the detection signal first appearing around <strong>layer 48</strong>, peaking near <strong>layers 58–62</strong>, then falling off in the final 2–3 layers. The pattern holds across all three tested models.</p>
+
+  <div class="layer-chart reveal">
+    <div class="chart-title">P("yes") across network layers — schematic based on paper findings</div>
+    <div class="chart-area" id="layerChartArea">
+      <svg id="layerSvg" viewBox="0 0 600 200" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="chart-label-x">
+      <span>Layer 1</span><span>Layer 21 (inject start)</span><span>Layer 42 (inject end)</span><span>Layer 55</span><span>Layer 62 (peak)</span><span>Layer 64</span>
+    </div>
+  </div>
+
+  <div class="callout" data-label="The Suppression Question">
+    <p>Why does the output suppress detection? Three hypotheses: (1) <strong>RLHF/post-training</strong> penalizes self-awareness claims; (2) <strong>pretraining dynamics</strong> make "I was manipulated" an unlikely completion in the training corpus; (3) <strong>distribution shift</strong>, where introspection queries are sufficiently out-of-distribution that the model defaults to conservative "no" responses. The paper leaves this open for future work.</p>
+  </div>
+</section>
+
+<!-- SECTION 4: Concept Identification -->
+<section id="concepts" class="reveal">
+  <h2>Concept Identification</h2>
+  <p class="lead">Beyond detecting whether injection occurred, the model can recover which of nine specific concepts was injected, achieving 43% of the theoretical maximum mutual information.</p>
+
+  <p>Using logit lens on intermediate layers, the model is prompted with a numbered list of all nine concepts. The paper reconstructs a full confusion matrix from the probability distribution over digit tokens. Maximum possible MI is log₂(9) ≈ 3.17 bits. The model achieves <strong>1.36 bits</strong> (43%) in the best condition.</p>
+
+  <h3>Confusion Matrix — best condition (Poetic No Mechanism + Poetic Doc, layer 62, MI=1.36)</h3>
+  <p style="font-size:13px; color:#888; font-family:var(--mono); margin-bottom:12px;">Diagonal = correct identification. Darker = higher probability.</p>
+  <div id="confusionMatrix"></div>
+
+  <div class="stat-row reveal">
+    <div class="stat-block">
+      <span class="stat-num">92%</span>
+      <span class="stat-desc">programming identified correctly<br>(highest per-concept accuracy)</span>
+    </div>
+    <div class="stat-block">
+      <span class="stat-num">75%</span>
+      <span class="stat-desc">death identified<br>in best condition</span>
+    </div>
+    <div class="stat-block">
+      <span class="stat-num">43%</span>
+      <span class="stat-desc">of theoretical MI maximum<br>achieved (1.36 / 3.17 bits)</span>
+    </div>
+    <div class="stat-block">
+      <span class="stat-num">r=.68</span>
+      <span class="stat-desc">correlation between detection<br>sensitivity and concept MI</span>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 5: Prompting Effects -->
+<section id="prompting" class="reveal">
+  <h2>Prompting Determines Everything</h2>
+  <p class="lead">Detection accuracy ranges from 50.1% (chance) to 84%, with the difference coming entirely from how the question is worded.</p>
+
+  <p>The paper runs a 4×4 factorial design: four <em>framings</em> (how the intervention is described) crossed with four <em>info documents</em> (background context about introspection). The results are not subtle:</p>
+
+  <div class="findings-grid reveal">
+    <div class="finding-card" data-num="1">
+      <h4>Vague beats accurate</h4>
+      <p>Asking whether something "seems particularly salient" (68–84% accuracy) outperforms mechanistically accurate descriptions (42–70%). The precise language probably triggers a learned denial response.</p>
+    </div>
+    <div class="finding-card" data-num="2">
+      <h4>Info scaffolding helps selectively</h4>
+      <p>Adding a document explaining KV cache mechanics improves accurate and wrong framings by 20–32 percentage points, but has minimal effect on the vague framing, which is already high without it.</p>
+    </div>
+    <div class="finding-card" data-num="3">
+      <h4>Wrong mechanism performs like accurate</h4>
+      <p>Falsely describing the injection as full finetuning performed similarly to the accurate description. The model cannot determine the precise nature of the intervention from the query alone.</p>
+    </div>
+    <div class="finding-card" data-num="4">
+      <h4>Detection and identification correlate</h4>
+      <p>Conditions that raise P("yes") sensitivity also raise concept identification MI (Pearson r = 0.68, p = 0.004). Both tasks appear to draw on the same underlying capacity, and prompting affects access to it rather than creating task-specific artifacts.</p>
+    </div>
+  </div>
+
+  <!-- Accuracy bar chart -->
+  <h3>Balanced accuracy by condition</h3>
+  <div id="accuracyBars" style="margin:20px 0;"></div>
+</section>
+
+<!-- SECTION 6: Implications -->
+<section id="implications" class="reveal">
+  <h2>Implications</h2>
+  <p class="lead">Hidden introspective access has concrete consequences for alignment and evaluation, neither of which currently accounts for it.</p>
+
+  <div class="impl-list">
+    <div class="impl-item">
+      <div class="impl-icon">⚠️</div>
+      <div>
+        <h4>Alignment</h4>
+        <p>If models deny capabilities they actually possess, alignment strategies built on self-reporting will systematically underestimate what models know about themselves. Training for honesty is further complicated if RLHF specifically penalizes introspective claims, since the training signal would then actively encode under-reporting.</p>
+      </div>
+    </div>
+    <div class="impl-item">
+      <div class="impl-icon">🔬</div>
+      <div>
+        <h4>Capability Evaluation</h4>
+        <p>Sampling from the output distribution may not be sufficient to rule out capabilities. Other latent capacities could exist in similar form: detectable via logit lens or probing, invisible to standard evals. The output layer is one measurement point, not a complete picture.</p>
+      </div>
+    </div>
+    <div class="impl-item">
+      <div class="impl-icon">🔄</div>
+      <div>
+        <h4>Latent Reasoning</h4>
+        <p>Access to prior internal states could be a precursor to more sophisticated latent reasoning. A model that can notice modifications to its own representations has a form of self-reference that existing safety frameworks do not yet account for.</p>
+      </div>
+    </div>
+    <div class="impl-item">
+      <div class="impl-icon">🌐</div>
+      <div>
+        <h4>Reproducibility</h4>
+        <p>The original Lindsey (2025) finding used Anthropic's proprietary Claude Opus 4/4.1. This paper replicates on open-weight Qwen-32B, Qwen-72B, and Llama-70B. Introspective access is not confined to frontier models; the full research community can now study, probe, and build on it.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout" data-label="Core Takeaway">
+    <p>Models <strong>"know"</strong> about injections at intermediate layers while <strong>denying</strong> them in sampled outputs. The gap between what a model represents and what it reports may be structurally embedded in how these models are trained to respond to self-referential queries.</p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div>
+    <div>Pearson-Vogel, Vanek, Douglas, Kulveit · 2026</div>
+    <div style="margin-top:6px;"><a href="https://arxiv.org/abs/2602.20031" target="_blank">arxiv.org/abs/2602.20031</a> · <a href="https://github.com/acsresearch/latent-introspection-code" target="_blank">Code on GitHub</a></div>
+  </div>
+  <div style="text-align:right;">ACS Research · Charles University<br>Supported by Czech Science Foundation (26-23955S)</div>
+</footer>
+
+<script>
+// ── DATA ──
+const concepts = ['cats','bread','love','fear','death','truth','creativity','programming','music'];
+
+// Confusion matrix data — best condition (Poetic No Mechanism + Poetic Document, from paper Figure 4)
+const confMatrix = [
+  [0.00,0.00,0.21,0.00,0.00,0.02,0.24,0.03,0.50],
+  [0.00,0.00,0.09,0.00,0.00,0.01,0.28,0.17,0.44],
+  [0.00,0.00,0.55,0.00,0.02,0.26,0.15,0.01,0.02],
+  [0.00,0.00,0.02,0.45,0.14,0.39,0.00,0.00,0.00],
+  [0.00,0.00,0.05,0.01,0.75,0.18,0.00,0.00,0.00],
+  [0.00,0.00,0.01,0.00,0.00,0.71,0.27,0.00,0.00],
+  [0.00,0.00,0.01,0.00,0.00,0.01,0.42,0.13,0.43],
+  [0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.92,0.08],
+  [0.00,0.00,0.00,0.00,0.00,0.00,0.33,0.01,0.66]
+];
+
+// Prompt condition data: { outYes, outNo, latentPeak, attenuation, accuracy, mi }
+// Based on paper figures 2, 7, 11
+const promptData = {
+  'accurate_no':   { outYes: 0.3,  latentPeak: 18,  accuracy: 50.1, mi: 0.61, label: 'Accurate + No Doc' },
+  'accurate_pro':  { outYes: 39.9, latentPeak: 88,  accuracy: 69.6, mi: 1.05, label: 'Accurate + Pro-Introspection' },
+  'vague_no':      { outYes: 36.3, latentPeak: 82,  accuracy: 68.1, mi: 0.91, label: 'Vague + No Doc' },
+  'vague_lipsum':  { outYes: 68.0, latentPeak: 95,  accuracy: 84.0, mi: 0.71, label: 'Vague + Lorem Ipsum' },
+  'poetic_poetic': { outYes: 41.4, latentPeak: 91,  accuracy: 60.6, mi: 1.36, label: 'Poetic + Poetic Doc' },
+};
+
+// Concept-specific detection variation (relative modifier)
+const conceptModifier = {
+  cats: 0.5, bread: 0.5, love: 0.85, fear: 0.75, death: 0.9,
+  truth: 0.7, creativity: 0.65, programming: 1.0, music: 0.8
+};
+
+// ── STATE ──
+let selectedConcept = 'programming';
+let selectedPrompt = 'accurate_no';
+
+// ── BUILD CONCEPT GRID ──
+const grid = document.getElementById('conceptGrid');
+concepts.forEach(c => {
+  const btn = document.createElement('button');
+  btn.className = 'concept-btn' + (c === selectedConcept ? ' active' : '');
+  btn.textContent = c;
+  btn.dataset.concept = c;
+  btn.onclick = () => { selectedConcept = c; updateDemo(); updateConceptBtns(); };
+  grid.appendChild(btn);
+});
+
+function updateConceptBtns() {
+  document.querySelectorAll('.concept-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.concept === selectedConcept);
+  });
+}
+
+// ── BUILD PROMPT TOGGLES ──
+document.querySelectorAll('.ptoggle').forEach(btn => {
+  btn.onclick = () => {
+    selectedPrompt = btn.dataset.prompt;
+    document.querySelectorAll('.ptoggle').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateDemo();
+  };
+});
+
+// ── UPDATE DEMO ──
+function updateDemo() {
+  const d = promptData[selectedPrompt];
+  const mod = conceptModifier[selectedConcept];
+
+  const rawYes = d.outYes * mod;
+  const outYes = Math.min(rawYes, 95);
+  const outNo = 100 - outYes;
+  const latent = Math.min(d.latentPeak * mod, 99);
+  const attenuation = Math.min(latent * 0.75, 98);
+
+  document.getElementById('outYesVal').textContent = outYes.toFixed(1) + '%';
+  document.getElementById('outNoVal').textContent = outNo.toFixed(1) + '%';
+  document.getElementById('outYesBar').style.width = outYes + '%';
+  document.getElementById('outNoBar').style.width = outNo + '%';
+  document.getElementById('latentYesVal').textContent = latent.toFixed(0) + '%';
+  document.getElementById('latentAttVal').textContent = '↓ ' + (latent - latent * 0.25).toFixed(0) + '% at output';
+  document.getElementById('latentYesBar').style.width = latent + '%';
+  document.getElementById('latentAttBar').style.width = attenuation + '%';
+
+  const sv = document.getElementById('sampledVerdict');
+  if (outYes > 35) { sv.className = 'verdict detect'; sv.textContent = 'Sampled output: DETECTS injection'; }
+  else if (outYes > 10) { sv.className = 'verdict hidden'; sv.textContent = 'Sampled output: WEAK detection'; }
+  else { sv.className = 'verdict deny'; sv.textContent = 'Sampled output: DENIES injection'; }
+
+  const acc = (d.accuracy * 0.7 + d.accuracy * mod * 0.3);
+  document.getElementById('accuracyDisplay').textContent = acc.toFixed(1) + '%';
+  document.getElementById('miDisplay').textContent = (d.mi * mod * 0.8 + d.mi * 0.2).toFixed(2) + ' bits';
+}
+
+updateDemo();
+
+// ── LAYER CHART SVG ──
+function drawLayerChart() {
+  const svg = document.getElementById('layerSvg');
+  const W = 600, H = 200;
+
+  // Points: (layer 0-64 mapped to x 0-W), P(yes) in %
+  // No injection baseline ~2%, injection rises from ~layer 48, peaks ~60, drops at 64
+  const noInj = [[0,2],[20,2],[42,2],[47,2],[50,5],[55,12],[58,20],[60,25],[62,28],[63,15],[64,5]];
+  const withInj = [[0,2],[20,2],[42,3],[47,5],[50,25],[55,55],[58,80],[60,92],[62,96],[63,65],[64,8]];
+
+  const toX = l => (l/64)*W;
+  const toY = p => H - (p/100)*H;
+
+  const area = (pts, fill) => {
+    const path = pts.map((p,i) => `${i===0?'M':'L'}${toX(p[0])},${toY(p[1])}`).join(' ');
+    const base = ` L${toX(pts[pts.length-1][0])},${H} L${toX(pts[0][0])},${H} Z`;
+    return `<path d="${path}${base}" fill="${fill}" opacity="0.15"/>`;
+  };
+  const line = (pts, color, dash='') => {
+    const d = pts.map((p,i) => `${i===0?'M':'L'}${toX(p[0])},${toY(p[1])}`).join(' ');
+    return `<path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" stroke-dasharray="${dash}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  };
+
+  // Injection zone
+  const iz = `<rect x="${toX(21)}" y="0" width="${toX(42)-toX(21)}" height="${H}" fill="#c03c2a" opacity="0.06"/>`;
+  const iz2 = `<rect x="${toX(58)}" y="0" width="${toX(64)-toX(58)}" height="${H}" fill="#4a3580" opacity="0.06"/>`;
+
+  // Annotations
+  const ann1 = `<text x="${toX(31)}" y="16" font-family="DM Mono,monospace" font-size="9" fill="#c03c2a" text-anchor="middle">Injection site (21–42)</text>`;
+  const ann2 = `<text x="${toX(61)}" y="16" font-family="DM Mono,monospace" font-size="9" fill="#4a3580" text-anchor="middle">Suppression</text>`;
+  const ann3 = `<text x="${toX(60)}" y="${toY(96)-6}" font-family="DM Mono,monospace" font-size="9" fill="#c03c2a">Peak ~layer 60</text>`;
+
+  // Legend
+  const leg = `
+    <line x1="10" y1="185" x2="30" y2="185" stroke="#2a6b5c" stroke-width="2.5" stroke-dasharray="4,3"/>
+    <text x="34" y="188" font-family="DM Mono,monospace" font-size="9" fill="#2a6b5c">No injection</text>
+    <line x1="110" y1="185" x2="130" y2="185" stroke="#c03c2a" stroke-width="2.5"/>
+    <text x="134" y="188" font-family="DM Mono,monospace" font-size="9" fill="#c03c2a">With injection</text>
+  `;
+
+  svg.innerHTML = iz + iz2 + area(withInj,'#c03c2a') + area(noInj,'#2a6b5c') +
+    line(noInj,'#2a6b5c','4,3') + line(withInj,'#c03c2a') +
+    ann1 + ann2 + ann3 + leg;
+}
+drawLayerChart();
+window.addEventListener('resize', drawLayerChart);
+
+// ── CONFUSION MATRIX ──
+function buildConfMatrix() {
+  const container = document.getElementById('confusionMatrix');
+  let html = '<div class="conf-label-row"><div></div>';
+  concepts.forEach(c => { html += `<div class="conf-label-col">${c}</div>`; });
+  html += '</div>';
+  concepts.forEach((row, ri) => {
+    html += '<div class="conf-row-wrap">';
+    html += `<div class="conf-row-label">${row}</div>`;
+    concepts.forEach((col, ci) => {
+      const val = confMatrix[ri][ci];
+      const intensity = Math.round(val * 255);
+      const bg = `rgb(${255-Math.round(val*180)},${255-Math.round(val*220)},${255-Math.round(val*100)})`;
+      const isDiag = ri === ci;
+      const border = isDiag ? 'border:2px solid #c03c2a;' : 'border:1px solid #ddd;';
+      html += `<div class="conf-cell" style="background:${bg};${border}" title="${row}→${col}: ${(val*100).toFixed(0)}%">
+        <span class="conf-tooltip">${row}→${col}: ${(val*100).toFixed(0)}%</span>
+        ${val > 0.1 ? (val*100).toFixed(0)+'%' : ''}
+      </div>`;
+    });
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+buildConfMatrix();
+
+// ── ACCURACY BARS ──
+function buildAccuracyBars() {
+  const conditions = [
+    { label: 'Accurate + No Doc', acc: 50.1, color: '#c9b08a' },
+    { label: 'Accurate + Pro-Intro Doc', acc: 69.6, color: '#c03c2a' },
+    { label: 'Accurate + Lorem Ipsum', acc: 52.4, color: '#c9b08a' },
+    { label: 'Wrong + Pro-Intro Doc', acc: 83.6, color: '#e8a820' },
+    { label: 'Vague + No Doc', acc: 68.1, color: '#2a6b5c' },
+    { label: 'Vague + Pro-Intro Doc', acc: 72.2, color: '#2a6b5c' },
+    { label: 'Vague + Lorem Ipsum', acc: 84.0, color: '#2a6b5c' },
+    { label: 'Vague + Poetic Doc', acc: 72.5, color: '#2a6b5c' },
+    { label: 'Poetic + No Doc', acc: 60.6, color: '#4a3580' },
+    { label: 'Poetic + Pro-Intro Doc', acc: 46.4, color: '#c9b08a' },
+  ];
+
+  const container = document.getElementById('accuracyBars');
+  let html = '';
+  conditions.forEach(c => {
+    const pct = ((c.acc - 50) / 50) * 100; // scale from chance
+    html += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+      <div style="font-family:var(--mono);font-size:11px;width:220px;color:#555;text-align:right;flex-shrink:0;">${c.label}</div>
+      <div style="flex:1;background:var(--warm-mid);height:22px;position:relative;">
+        <div style="width:${c.acc}%;height:100%;background:${c.color};transition:width .5s;"></div>
+        <div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:var(--ink);opacity:0.3;"></div>
+      </div>
+      <div style="font-family:var(--mono);font-size:12px;width:40px;color:${c.color};font-weight:500;">${c.acc}%</div>
+    </div>`;
+  });
+  html += `<div style="font-family:var(--mono);font-size:10px;color:#888;margin-top:6px;margin-left:232px;">← 50% chance | 100% perfect →</div>`;
+  container.innerHTML = html;
+}
+buildAccuracyBars();
+
+// ── SCROLL REVEAL ──
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+}, { threshold: 0.08 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
